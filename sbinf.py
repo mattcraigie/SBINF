@@ -6,6 +6,18 @@ import matplotlib.pyplot as plt
 
 
 class InferenceModel(nn.Module):
+    """
+    A class for performing simulation-based inference with a conditional normalizing flow. Given data, the model is
+    trained to learn the conditional posterior distribution. The model can then be used to sample from this posterior
+    distribution given an observation (i.e. a conditioning for the probability distribution).
+
+    Usage is as follows:
+    1. Create an instance of the InferenceModel class
+    2. Add simulated data and targets to the model using the `add_simulations` method
+    3. Set up the conditional flow model using the `setup` method
+    4. Train the model using the `train_model` method
+    5. Sample from the posterior using the `sample` method
+    """
     def __init__(self,
                  flow_type=None,
                  num_flow_layers=None,
@@ -51,6 +63,15 @@ class InferenceModel(nn.Module):
         self.simulated_targets = simulated_targets
         self.num_features = simulated_features.shape[1]
         self.num_targets = simulated_targets.shape[1]
+
+    def setup(self, device=None):
+        try:
+            self.setup_mapping[self.flow_type]()
+        except KeyError:
+            raise NotImplementedError("Flow type {} not implemented".format(self.flow_type))
+
+        if device is not None:
+            self.to(device)
 
     def train_model(self, num_epochs=100, lr=1e-4, batch_size=32):
         """
@@ -112,7 +133,6 @@ class InferenceModel(nn.Module):
         :param samples: the samples from the posterior (num_samples x num_targets)
         :return: the log probability of the posterior (num_samples x 1)
         """
-
         return self.model.log_prob(condition, samples)
 
     def to(self, device):
@@ -125,15 +145,6 @@ class InferenceModel(nn.Module):
         super(InferenceModel, self).to(device)
         self.model.to(device)
         self.device = device
-
-    def setup(self, device=None):
-        try:
-            self.setup_mapping[self.flow_type]()
-        except KeyError:
-            raise NotImplementedError("Flow type {} not implemented".format(self.flow_type))
-
-        if device is not None:
-            self.to(device)
 
     def show_loss(self):
         """
