@@ -42,7 +42,8 @@ class InferenceModel(nn.Module):
         self.num_targets = None
 
         # setup method flags
-        self.setup_mapping = {'neural_spline_flow': self._neural_spline_flow_setup}
+        self.setup_mapping = {'neural_spline_flow': self._neural_spline_flow_setup,
+                              'masked_autoregressive_flow': self._masked_autoregressive_flow_setup}
 
         # neural spline flow parameters
         self.num_flow_layers = num_flow_layers
@@ -159,6 +160,7 @@ class InferenceModel(nn.Module):
         plt.show()
 
     def _neural_spline_flow_setup(self):
+        # todo: pull out common parts in setup methods
         """
         Sets up the neural spline flow model
         :return:
@@ -178,7 +180,7 @@ class InferenceModel(nn.Module):
 
         # add nsf layers
         self.flows = []
-        for i in range(self.num_hidden_layers):
+        for i in range(self.num_flow_layers):
             self.flows += [nf.flows.AutoregressiveRationalQuadraticSpline(latent_size, self.num_hidden_layers,
                                                                           self.num_hidden_units,
                                                                           num_context_channels=context_size)]
@@ -188,6 +190,31 @@ class InferenceModel(nn.Module):
         self.base_distribution = nf.distributions.DiagGaussian(self.num_targets, trainable=False)
 
         # construct flow model
+        self.model = nf.ConditionalNormalizingFlow(self.base_distribution, self.flows, self.simulated_targets)
+
+    def _masked_autoregressive_flow_setup(self):
+        # defaults
+        if self.num_flow_layers is None:
+            self.num_flow_layers = 2
+        if self.num_hidden_units is None:
+            self.num_hidden_units = 128
+        if self.num_blocks is None:
+            self.num_blocks = 2
+
+        latent_size = self.num_targets
+        context_size = self.num_features
+
+        flows = []
+        for i in range(self.num_flow_layers):
+            flows += [nf.flows.MaskedAffineAutoregressive(latent_size, self.num_hidden_units,
+                                                          context_features=context_size,
+                                                          num_blocks=self.num_blocks)]
+            flows += [nf.flows.LULinearPermute(latent_size)]
+
+        # Set base distribution
+        self.base_distribution = nf.distributions.DiagGaussian(self.num_targets, trainable=False)
+
+        # Construct flow model
         self.model = nf.ConditionalNormalizingFlow(self.base_distribution, self.flows, self.simulated_targets)
 
     def _make_dataloaders(self, batch_size, val_fraction=0.2):
