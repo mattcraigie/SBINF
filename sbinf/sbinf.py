@@ -36,6 +36,10 @@ class InferenceModel(nn.Module):
         self.train_losses = None
         self.val_losses = None
 
+        # best model tracking
+        self.best_val_loss = float('inf')
+        self.best_model_state = None
+
         # data parameters
         self.simulated_features = None
         self.simulated_targets = None
