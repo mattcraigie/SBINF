@@ -3,7 +3,7 @@ import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
 import normflows as nf
 import matplotlib.pyplot as plt
-
+import copy
 
 class InferenceModel(nn.Module):
     """
