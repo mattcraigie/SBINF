@@ -23,6 +23,7 @@ class InferenceModel(nn.Module):
                  num_flow_layers=None,
                  num_hidden_units=None,
                  num_hidden_layers=None,
+                 num_blocks=None
                  ):
         super(InferenceModel, self).__init__()
 
@@ -49,6 +50,7 @@ class InferenceModel(nn.Module):
         self.num_flow_layers = num_flow_layers
         self.num_hidden_units = num_hidden_units
         self.num_hidden_layers = num_hidden_layers
+        self.num_blocks = num_blocks
 
         # other model parameters...
 
@@ -89,29 +91,39 @@ class InferenceModel(nn.Module):
         # set up the data loaders
         self._make_dataloaders(batch_size)
 
-        train_losses = []
-        val_losses = []
-
+        self.train_losses = []
+        self.val_losses = []
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=lr)
 
-        print_every = num_epochs // 10
+        print(f"Beginning training for {num_epochs} epochs\n")
+        print_every = max(1, num_epochs // 10)
 
-        print("Beginning training for {} epochs\n".format(num_epochs))
         for epoch in range(num_epochs):
             train_loss = self._train_step()
             val_loss = self._val_step()
 
-            train_losses.append(train_loss)
-            val_losses.append(val_loss)
+            self.train_losses.append(train_loss)
+            self.val_losses.append(val_loss)
+
+            # check for best model
+            if val_loss < self.best_val_loss:
+                self.best_val_loss = val_loss
+                self.best_model_state = copy.deepcopy(self.model.state_dict())
 
             if epoch % print_every == 0:
-                print(f"Epoch {epoch + 1} \t| Train Loss: {train_loss:.3e} \t| Val Loss: {val_loss:.3e}")
+                print(f"Epoch {epoch+1}\t| Train Loss: {train_loss:.3e}\t| Val Loss: {val_loss:.3e}")
 
-        self.train_losses = train_losses
-        self.val_losses = val_losses
+        print(f"\nTraining complete. Best val loss: {self.best_val_loss:.3e}")
 
-        print("\nTraining complete. Final train loss: {:.3e} | Final val loss: {:.3e}".format(train_losses[-1],
-                                                                                              val_losses[-1]))
+    def load_best_model(self):
+        """
+        Loads the model state corresponding to the best validation loss observed during training.
+        """
+        if self.best_model_state is None:
+            raise ValueError("No saved model state found. Have you run train_model()?")
+        self.model.load_state_dict(self.best_model_state)
+        self.model.to(self.device)
+        print(f"Loaded best model with val loss {self.best_val_loss:.3e}")
 
     def sample(self, num_samples, condition):
         """
@@ -204,12 +216,12 @@ class InferenceModel(nn.Module):
         latent_size = self.num_targets
         context_size = self.num_features
 
-        flows = []
+        self.flows = []
         for i in range(self.num_flow_layers):
-            flows += [nf.flows.MaskedAffineAutoregressive(latent_size, self.num_hidden_units,
+            self.flows += [nf.flows.MaskedAffineAutoregressive(latent_size, self.num_hidden_units,
                                                           context_features=context_size,
                                                           num_blocks=self.num_blocks)]
-            flows += [nf.flows.LULinearPermute(latent_size)]
+            self.flows += [nf.flows.LULinearPermute(latent_size)]
 
         # Set base distribution
         self.base_distribution = nf.distributions.DiagGaussian(self.num_targets, trainable=False)
