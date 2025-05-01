@@ -80,7 +80,8 @@ class InferenceModel(nn.Module):
         if device is not None:
             self.to(device)
 
-    def train_model(self, num_epochs=100, lr=1e-4, batch_size=32):
+    def train_model(self, num_epochs=100, lr=1e-4, batch_size=32, val_fraction=0.2,
+                    shuffle_split=True, shuffle_dataloaders=True):
         """
         Trains the conditional flow model on the simulated data. The model is trained to minimize the KL divergence
         :param num_epochs: the number of epochs to train for
@@ -93,7 +94,7 @@ class InferenceModel(nn.Module):
         assert self.model is not None, "Model must be setup before training"
 
         # set up the data loaders
-        self._make_dataloaders(batch_size)
+        self._make_dataloaders(batch_size, val_fraction, shuffle_split, shuffle_dataloaders)
 
         self.train_losses = []
         self.val_losses = []
@@ -233,20 +234,15 @@ class InferenceModel(nn.Module):
         # Construct flow model
         self.model = nf.ConditionalNormalizingFlow(self.base_distribution, self.flows, self.simulated_targets)
 
-    def _make_dataloaders(self, batch_size, val_fraction=0.2, shuffle_split=True, shuffle_dataloaders=True,
-                          dataset_class=None):
+    def _make_dataloaders(self, batch_size, val_fraction=0.2, shuffle_split=True, shuffle_dataloaders=True):
         """
         Makes dataloaders for the simulated data
         :param batch_size: the batch size for the dataloaders
         :param val_fraction: the fraction of the data to use for validation
         :param shuffle_split: whether to shuffle the data before splitting into train and val
         :param shuffle_dataloaders: whether to shuffle the dataloaders
-        :param dataset_class: the class to use for the dataset. Defaults to TensorDataset
         :return: train_loader, val_loader
         """
-        # default dataset class
-        if dataset_class is None:
-            dataset_class = TensorDataset
 
         # determine split sizes
         num_data = self.simulated_features.shape[0]
@@ -265,8 +261,8 @@ class InferenceModel(nn.Module):
         val_targets = self.simulated_targets[val_idx]
 
         # create datasets
-        train_dataset = dataset_class(train_data, train_targets)
-        val_dataset = dataset_class(val_data, val_targets)
+        train_dataset = TensorDataset(train_data, train_targets)
+        val_dataset = TensorDataset(val_data, val_targets)
 
         # create dataloaders
         train_loader = DataLoader(train_dataset,
