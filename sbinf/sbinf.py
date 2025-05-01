@@ -265,14 +265,13 @@ class InferenceModel(nn.Module):
         val_dataset = TensorDataset(val_data, val_targets)
 
         # create dataloaders
-        train_loader = DataLoader(train_dataset,
+        self.train_loader = DataLoader(train_dataset,
                                   batch_size=batch_size,
                                   shuffle=shuffle_dataloaders)
-        val_loader = DataLoader(val_dataset,
+        self.val_loader = DataLoader(val_dataset,
                                 batch_size=batch_size,
                                 shuffle=shuffle_dataloaders)
 
-        return train_loader, val_loader
 
     def _train_step(self):
         """
