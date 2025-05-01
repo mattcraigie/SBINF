@@ -233,34 +233,50 @@ class InferenceModel(nn.Module):
         # Construct flow model
         self.model = nf.ConditionalNormalizingFlow(self.base_distribution, self.flows, self.simulated_targets)
 
-    def _make_dataloaders(self, batch_size, val_fraction=0.2):
+    def _make_dataloaders(self, batch_size, val_fraction=0.2, shuffle_split=True, shuffle_dataloaders=True,
+                          dataset_class=None):
         """
         Makes dataloaders for the simulated data
         :param batch_size: the batch size for the dataloaders
-        :return:
+        :param val_fraction: the fraction of the data to use for validation
+        :param shuffle_split: whether to shuffle the data before splitting into train and val
+        :param shuffle_dataloaders: whether to shuffle the dataloaders
+        :param dataset_class: the class to use for the dataset. Defaults to TensorDataset
+        :return: train_loader, val_loader
         """
+        # default dataset class
+        if dataset_class is None:
+            dataset_class = TensorDataset
 
-        # shuffle data
+        # determine split sizes
         num_data = self.simulated_features.shape[0]
-        shuffle_idx = torch.randperm(self.simulated_features.shape[0])
-        self.simulated_features = self.simulated_features[shuffle_idx]
-        self.simulated_targets = self.simulated_targets[shuffle_idx]
-
-        # create datasets
         train_fraction = 1 - val_fraction
         num_train = int(num_data * train_fraction)
 
-        self.train_data = self.simulated_features[:num_train]
-        self.train_targets = self.simulated_targets[:num_train]
-        self.val_data = self.simulated_features[num_train:]
-        self.val_targets = self.simulated_targets[num_train:]
+        # compute shuffle indices for split
+        shuffle_idx = torch.randperm(num_data) if shuffle_split else torch.arange(num_data)
+        train_idx = shuffle_idx[:num_train]
+        val_idx = shuffle_idx[num_train:]
 
-        train_dataset = TensorDataset(self.train_data, self.train_targets)
-        val_dataset = TensorDataset(self.val_data, self.val_targets)
+        # slice features and targets
+        train_data = self.simulated_features[train_idx]
+        train_targets = self.simulated_targets[train_idx]
+        val_data = self.simulated_features[val_idx]
+        val_targets = self.simulated_targets[val_idx]
+
+        # create datasets
+        train_dataset = dataset_class(train_data, train_targets)
+        val_dataset = dataset_class(val_data, val_targets)
 
         # create dataloaders
-        self.train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-        self.val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=True)
+        train_loader = DataLoader(train_dataset,
+                                  batch_size=batch_size,
+                                  shuffle=shuffle_dataloaders)
+        val_loader = DataLoader(val_dataset,
+                                batch_size=batch_size,
+                                shuffle=shuffle_dataloaders)
+
+        return train_loader, val_loader
 
     def _train_step(self):
         """
